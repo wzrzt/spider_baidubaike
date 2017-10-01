@@ -1,5 +1,8 @@
 # coding:utf8
 import re
+# import urllib
+import urllib
+
 from anaconda_project.plugins.network_util import urlparse
 from bs4 import BeautifulSoup
 
@@ -13,19 +16,26 @@ class HtmlParser(object):
         links = soup.find_all('a', href=re.compile(r'/item/[0-9a-zA-Z%]+'))
         for link in links:
             new_url = link['href']
+            # new_url_tail = link.get_text()
+            # new_full_url = urlparse.urljoin(page_url,  '/'.join(('/item', urllib.parse.quote(new_url_tail))))
             new_full_url = urlparse.urljoin(page_url, new_url)
             new_urls.add(new_full_url)
 
         return new_urls
 
     def _get_new_data(self, page_url, soup):
+
         res_data={}
-        res_data['url'] = page_url
+
+        # urllib.parse.unquote 让url中的汉字显示出来
+        res_data['url'] = urllib.parse.unquote(page_url)
 
         # <dd class="lemmaWgt-lemmaTitle-title"> <h1>Python</h1>
 
         title_node = soup.find('dd', class_="lemmaWgt-lemmaTitle-title")
-        res_data['title'] = title_node.get_text()
+
+        # 先找到 h1 再获取其中的文字
+        res_data['title'] = title_node.find('h1').get_text()
 
         # <div class="lemma-summary" label-module="lemmaSummary">
         # <div class="para" label-module="para">Python<sup>[1]</sup>

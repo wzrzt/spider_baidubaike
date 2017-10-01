@@ -1,7 +1,10 @@
 # coding:utf8
+import urllib
+
 from spider_baidubaike import url_manager, html_downloader, html_parser, html_outputer
 import time
 import random
+
 
 class SpiderMain(object):
     def __init__(self):
@@ -17,7 +20,10 @@ class SpiderMain(object):
         while self.urls.has_new_url():
             try:
                 new_url = self.urls.get_new_url()
-                print("crawing %d : %s" % (count, new_url))
+
+                # urllib.parse.unquote 让 url 的中汉语部分显示出来
+
+                print("crawing %d : %s" % (count, urllib.parse.unquote(new_url)))
                 html_cont = self.downloader.download(new_url)
                 new_urls, new_data = self.parser.parse(new_url, html_cont)
                 self.urls.add_new_urls(new_urls)
@@ -27,7 +33,7 @@ class SpiderMain(object):
                     break
 
                 count += 1
-                time.sleep(1)
+                #        time.sleep(1)
 
             except:
                 print("craw failed")
@@ -35,7 +41,7 @@ class SpiderMain(object):
         self.outputer.output_html()
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     root_url = "https://baike.baidu.com/item/Python/407313"
     obj_spider = SpiderMain()
     obj_spider.craw(root_url)
