@@ -6,25 +6,22 @@ import urllib.request
 
 class HtmlDownloader(object):
 
-    def download(self, url):
+    def download(self, url, driver):
         if url is None:
             return None
 
-    #    driver_dir = "/home/weirain/Apps/chromedriver/chromedriver"
-    #    driver = webdriver.Chrome(driver_dir)  # 打开浏览器
+        driver.get(url)
 
-    #   driver.get(url)
+        response = driver.page_source  # 这是原网页 HTML 信息
 
-    #    response = driver.page_source  # 这是原网页 HTML 信息
+        # response = urllib.request.urlopen(url)
 
-        response = urllib.request.urlopen(url)
-
-        if response.getcode() != 200:
+        if response is None:
             return None
 
-        return response.read()
+        return response
 
-  #  driver_dir = "/home/weirain/Apps/chromedriver/chromedriver"
+   # driver_dir = "/home/weirain/Apps/chromedriver/chromedriver"
    # driver = webdriver.Chrome(driver_dir)   # 打开浏览器
    # driver.get("https://www.zhihu.com/people/meretsger/answers")
 
