@@ -1,6 +1,5 @@
 # coding:utf8
 
-# coding:utf8
 import re
 import urllib
 import math
@@ -25,7 +24,7 @@ if os.environ['HOME'] == '/Users/weirain':
 elif os.environ['HOME'] == '/home/weirain':
     webdriver_path = '/home/weirain/Apps/chromedriver/chromedriver'
 
-driver = webdriver.Chrome()
+driver = webdriver.Chrome(webdriver_path)
 
 
 
@@ -35,10 +34,7 @@ def CrawUsers(user):
 
     base_url = 'https://www.zhihu.com'
     following_url = urlparse.urljoin(base_url, "/".join((user, 'following')))
-#    current_url = urlparse.urljoin(zhihu_url, "/".join((current_user, 'following')))
-    answers_url = urlparse.urljoin(zhihu_url, "/".join((current_user, 'answers')))
-
-    # return base_user_url
+    answers_url = urlparse.urljoin(zhihu_url, "/".join((user, 'answers')))
 
     driver.get(following_url)
     url_source = driver.page_source
@@ -53,19 +49,18 @@ def CrawUsers(user):
 
     followings = source_soup.find_all('h2', class_='ContentItem-title')
 
-    if (following_page_count > 2):
-        for i in range(2, following_page_count + 1):
+    if following_page_count > 2:
+        for i in range(2, int(following_page_count) + 1):
             user_following_url = '?'.join((following_url, 'page={}'.format(i)))
             driver.get(user_following_url)
             url_source = driver.page_source
             source_soup = BeautifulSoup(url_source, 'html.parser')
             followings.extend(source_soup.find_all('h2', class_='ContentItem-title'))
 
-
     if len(followings) == 0:
         return None
     else:
-        result_data = pd.DataFrame()
+        followings_data = pd.DataFrame()
         for following in followings:
             following_user = following.find('a', attrs={'data-za-detail-view-element_name': 'User'})['href']
             following_data = {}
@@ -76,14 +71,127 @@ def CrawUsers(user):
                 following_data['Certification_tag'] = following.find('a', class_='UserLink-badge')['data-tooltip']
             else:
                 following_data['Certification_tag'] = None
-            result_data = result_data.append(pd.DataFrame(following_data, index=[0]))
+                followings_data = followings_data.append(pd.DataFrame(following_data, index=[0]))
 
-        return result_data # , following_data_all
+        followings_data['current_user'] = user
+
+        driver.get(answers_url)
+
+        time.sleep(0.5)
+        driver.find_element_by_css_selector('button.ProfileHeader-expandButton.Button--plain').click()
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+
+        answers_url_source = driver.page_source
+        answers_source_soup = BeautifulSoup(answers_url_source, 'html.parser')
+
+        # user profile and some other things.
+
+        user_name = answers_source_soup.find('span', class_="ProfileHeader-name").get_text()
+        user_headline = answers_source_soup.find('span', class_="RichText ProfileHeader-headline").get_text()
+        gender = answers_source_soup.find('meta', itemprop="gender")['content']
+        voteup_count = int(answers_source_soup.find('meta', itemprop="zhihu:voteupCount")['content'])
+        thanked_count = int(answers_source_soup.find('meta', itemprop="zhihu:thankedCount")['content'])
+        follower_count = int(answers_source_soup.find('meta', itemprop="zhihu:followerCount")['content'])
+        answer_count = int(answers_source_soup.find('meta', itemprop="zhihu:answerCount")['content'])
+        articles_count = int(answers_source_soup.find('meta', itemprop="zhihu:articlesCount")['content'])
+
+        # 个人信息有的有多个值，需要研究怎么处理。可以上知乎账号设置里看看，最多有多少个值
+
+        user_infos = answers_source_soup.find_all('div', class_='ProfileHeader-detailItem')
+
+        user_profile = {}
+        for user_info in user_infos:
+            print("key:{};value:{}".format(user_info.find('span', class_='ProfileHeader-detailLabel').get_text(),
+                                           user_info.find('div', class_='ProfileHeader-detailValue').get_text()))
+            keyname = user_info.find('span', class_='ProfileHeader-detailLabel').get_text()
+            keyvalue = user_info.find('div', class_='ProfileHeader-detailValue')
+            keyvalue_sub = keyvalue.find_all('div', class_='ProfileHeader-field')
+            if keyvalue_sub:
+                for i in range(len(keyvalue)):
+                    user_profile[keyname] = ";".join(map(lambda x: x.get_text(), keyvalue_sub))
+            else:
+                user_profile[keyname] = keyvalue.get_text()
+
+        user_profile = pd.DataFrame(user_profile, index=[0])
+        user_profile.rename(columns={'个人简介': 'self_introduce',
+                                     '居住地': 'living_area',
+                                     '所在行业': 'industry',
+                                     '职业经历': 'work_experience',
+                                     '教育经历': 'education'}, inplace=True)
+
+        user_profile['user_name'] = user_name
+        user_profile['headline'] = user_headline
+        user_profile['gender'] = gender
+        user_profile['voteup_count'] = voteup_count
+        user_profile['thanked_count'] = thanked_count
+        user_profile['following_count'] = following_count
+        user_profile['follower_count'] = follower_count
+        user_profile['articles_count'] = articles_count
+
+        answer_page_count = math.ceil(answer_count / 20)
+
+        answers = answers_source_soup.find_all('div', class_="ContentItem AnswerItem")
+        # print(len(answers))
+        answers_data = pd.DataFrame()
+        retry_times = 0
+        if answer_page_count > 2:
+            for i in range(2, int(answer_page_count) + 1):
+                # print(i)
+                answer_url_1 = '?'.join((answers_url, 'page={}'.format(i)))
+                driver.get(answer_url_1)
+                time.sleep(0.5)
+                # driver.find_element_by_css_selector('button.ProfileHeader-expandButton.Button--plain').click()
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+
+                answer_source_1 = driver.page_source
+                answer_source_1_soup = BeautifulSoup(answer_source_1, 'html.parser')
+                answer = answer_source_1_soup.find_all('div', class_="ContentItem AnswerItem")
+            # print(len(answer))
+                while (i < answer_page_count and len(answer) < 20) or \
+                        (i == answer_page_count + 1 and len(answer) < answer_count - (answer_page_count - 1) * 20):
+                    # print('retry')
+                    retry_times += 1
+                    time.sleep(0.5 * retry_times)
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    answer_source_1 = driver.page_source
+                    answer_source_1_soup = BeautifulSoup(answer_source_1, 'html.parser')
+                    answer = answer_source_1_soup.find_all('div', class_="ContentItem AnswerItem")
+                    if retry_times > 3:
+                        break
+
+                answers.extend(answer)
+            #    print(len(answer))
+                retry_times = 0
+
+        for answer in answers:
+            answer_info = json.loads(answer['data-za-module-info'])
+
+            answer_data = pd.DataFrame(answer_info.get('card').get('content'), index=[0])[
+                ['token', 'parent_token', 'upvote_num', 'comment_num']]
+            answer_data['user'] = 'rou-wang-wan'  # current_user
+            answer_data['question'] = answer.find('meta', itemprop='name')['content']
+            answer_data['created'] = answer.find('meta', itemprop='dateCreated')['content']
+            answer_data['modified'] = answer.find('meta', itemprop='dateModified')['content']
+
+            answer_status = answer.find('div', class_='AnswerItem-statusContent')
+
+            if answer_status:
+                answer_data['fold'] = 1
+                answer_data['fold_reason'] = answer_status.find('div', class_='AnswerItem-statusDescription').get_text()
+            else:
+                answer_data['fold'] = 0
+                answer_data['fold_reason'] = None
+
+            answers_data = answers_data.append(pd.DataFrame(answer_data))
+
+        return followings_data, answers_data, user_profile
 
 
 
 
-result_data = pd.DataFrame()
+followings_df = pd.DataFrame()
+user_df = pd.DataFrame()
+answers_df = pd.DataFrame()
 # root_url = 'https://www.zhihu.com/people/meretsger'
 # root_user = {'tag': 'people', 'webname': 'meretsger'}
 root_user = "/people/meretsger"
@@ -106,18 +214,21 @@ while len(newUserSet) > 0:
     oldUserSet.add(current_user)
     # current_user_name = re.split('/', re.sub('https://www.zhihu.com/', '', user))[1]
     try:
-        result_data1 = CrawUsers(current_user)
-        result_data1['current_user'] = current_user
-        result_data1['id'] = craw_count
+        followings_data, answers_data, user_profile = CrawUsers(current_user)
+        followings_data['id'] = craw_count
         # print(current_user_name)
         # print(result_data1)
-        for following_user in result_data1['following_user']:
+        for following_user in followings_data['following_user']:
             if following_user not in oldUserSet:
                 newUserSet.add(following_user)
-        print("""Crawing {}'s followers ... ... """.format(current_user))
+        print("""Crawing {}'s data ... ... """.format(current_user))
         print("""His/her webname is {}""".format(current_user))
-        print(result_data1.shape)
-        result_data = result_data.append(result_data1, ignore_index=True)
+        print(followings_data.shape)
+        followings_df = followings_df.append(followings_data, ignore_index=True)
+        user_profile['id'] = craw_count
+        user_df = user_df.append(user_profile, ignore_index=True)
+        answers_data['id'] = craw_count
+        answers_df = answers_df.append(answers_data)
 
     except Exception as e:
         print(e)

@@ -236,7 +236,7 @@ for answer in answers:
     answers_data = answers_data.append(pd.DataFrame(answer_data))
 
 
-# driver.find_element_by_css_selector('button.ProfileHeader-expandButton.Button--plain').click()
+driver.find_element_by_css_selector('button.ProfileHeader-expandButton.Button--plain').click()
 
 user_profile = pd.DataFrame()
 answers_source_soup.find('div', class_='ProfileHeader-info').get_text()
@@ -247,9 +247,23 @@ driver.get("https://www.zhihu.com/people/luvddd/activities")
 driver.find_element_by_css_selector('button.ProfileHeader-expandButton.Button--plain').click()
 luvddd_source = driver.page_source
 luvddd_source_soup = BeautifulSoup(luvddd_source, "html.parser")
-luvddd_source_soup.find_all('div', class_='ProfileHeader-detailItem')
-luvddd_source_soup.find_all('div', class_='ProfileHeader-detailItem')[2].find_all('div', class_="ProfileHeader-field")[0].get_text()
+user_infos = luvddd_source_soup.find_all('div', class_='ProfileHeader-detailItem')
+# luvddd_source_soup.find_all('div', class_='ProfileHeader-detailItem')[2].find_all('div', class_="ProfileHeader-field")[0].get_text()
 
+user_profile = {}
+for user_info in user_infos:
+    print("key:{};value:{}".format(user_info.find('span', class_='ProfileHeader-detailLabel').get_text(),
+                                   user_info.find('div', class_='ProfileHeader-detailValue').get_text()))
+    keyname = user_info.find('span', class_='ProfileHeader-detailLabel').get_text()
+    keyvalue = user_info.find('div', class_='ProfileHeader-detailValue')
+    keyvalue_sub = keyvalue.find_all('div', class_='ProfileHeader-field')
+    if keyvalue_sub:
+        for i in range(len(keyvalue)):
+            user_profile[keyname] = ";".join(map(lambda x: x.get_text(), keyvalue_sub))
+    else:
+        user_profile[keyname] = keyvalue.get_text()
+
+user_profile = pd.DataFrame(user_profile, index=[0])
 
 with open('source.txt', 'w', encoding='utf-8') as f:
     f.write(answers_source_soup.prettify())
