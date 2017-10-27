@@ -282,8 +282,8 @@ def craw_user_info(user, driver):
 
     user_profile = {}
     for user_info in user_infos:
-        print("key:{};value:{}".format(user_info.find('span', class_='ProfileHeader-detailLabel').get_text(),
-                                       user_info.find('div', class_='ProfileHeader-detailValue').get_text()))
+        # print("key:{};value:{}".format(user_info.find('span', class_='ProfileHeader-detailLabel').get_text(),
+        #                                user_info.find('div', class_='ProfileHeader-detailValue').get_text()))
         keyname = user_info.find('span', class_='ProfileHeader-detailLabel').get_text()
         keyvalue = user_info.find('div', class_='ProfileHeader-detailValue')
         keyvalue_sub = keyvalue.find_all('div', class_='ProfileHeader-field')
@@ -310,6 +310,7 @@ def craw_user_info(user, driver):
     user_profile['follower_count'] = follower_count
     user_profile['articles_count'] = articles_count
     user_profile['answer_count'] = answer_count
+    print("user:{}; user_name:{}".format(user, user_name, user_headline))
 
     return user_profile
 
@@ -391,7 +392,7 @@ def craw_answers(user, driver):
         return answers_data
 
 
-def main():
+def main(max_craw):
 
     print("start !")
 
@@ -441,7 +442,7 @@ def main():
         except Exception as user_info_e:
             print(user_info_e)
             print("""User information of {} craw failed""".format(current_user))
-            sqlite_db.execute("insert into users('id', 'webname') values({}, '{}')".format(craw_count, current_user))
+            sqlite_db.execute("insert into users('id', 'web_name') values({}, '{}')".format(craw_count, current_user))
 
         try:
             followings_data = craw_following(current_user, driver=driver)
@@ -468,7 +469,7 @@ def main():
             print("""following of {} craw failed or he/she has no answer""".format(current_user))
 
         craw_count += 1
-        if craw_count == 1000:
+        if craw_count == max_craw:
             break
 
         # if current_user_name == 'rou-wang-wan':
@@ -479,4 +480,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(max_craw=1000)
