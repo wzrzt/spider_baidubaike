@@ -1,23 +1,17 @@
 # coding:utf8
 
 import re
-import urllib
 import math
-
 from anaconda_project.plugins.network_util import urlparse
 from bs4 import BeautifulSoup
-
 import os
 from selenium import webdriver
-
 import time
-import random
-
 import sqlite3
 import json
 import pandas as pd
 
-root_url = "https://www.zhihu.com/people/meretsger/following"
+# root_url = "https://www.zhihu.com/people/meretsger/following"
 # 打开浏览器
 if os.environ['HOME'] == '/Users/weirain':
     webdriver_path = '/Users/weirain/Tools/webdrivers/chromedriver'
@@ -27,14 +21,19 @@ elif os.environ['HOME'] == '/home/weirain':
 driver = webdriver.Chrome(webdriver_path)
 
 
+# 数据库
+
+sqlite_db_connect = sqlite3.Connection("zhihu_data.db")
+sqlite_db = sqlite_db_connect.cursor()
+
+tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table'", sqlite_db_connect)
 
 
-
-def CrawUsers(user):
+def craw_users(user):
 
     base_url = 'https://www.zhihu.com'
     following_url = urlparse.urljoin(base_url, "/".join((user, 'following')))
-    answers_url = urlparse.urljoin(zhihu_url, "/".join((user, 'answers')))
+    answers_url = urlparse.urljoin(base_url, "/".join((user, 'answers')))
 
     driver.get(following_url)
     url_source = driver.page_source
@@ -87,7 +86,9 @@ def CrawUsers(user):
         # user profile and some other things.
 
         user_name = answers_source_soup.find('span', class_="ProfileHeader-name").get_text()
-        user_headline = answers_source_soup.find('span', class_="RichText ProfileHeader-headline").get_text()
+        user_headline1 = answers_source_soup.find('span', class_="RichText ProfileHeader-headline")
+        if user_headline1:
+            user_headline = user_headline1.get_text()
         gender = answers_source_soup.find('meta', itemprop="gender")['content']
         voteup_count = int(answers_source_soup.find('meta', itemprop="zhihu:voteupCount")['content'])
         thanked_count = int(answers_source_soup.find('meta', itemprop="zhihu:thankedCount")['content'])
@@ -119,6 +120,7 @@ def CrawUsers(user):
                                      '职业经历': 'work_experience',
                                      '教育经历': 'education'}, inplace=True)
 
+        user_profile['web_name'] = user
         user_profile['user_name'] = user_name
         user_profile['headline'] = user_headline
         user_profile['gender'] = gender
@@ -187,62 +189,70 @@ def CrawUsers(user):
         return followings_data, answers_data, user_profile
 
 
+def main():
 
+    # followings_df = pd.DataFrame()
+    # user_df = pd.DataFrame()
+    # answers_df = pd.DataFrame()
+    # root_url = 'https://www.zhihu.com/people/meretsger'
+    # root_user = {'tag': 'people', 'webname': 'meretsger'}
+    root_user = "/people/meretsger"
+    zhihu_url = 'https://www.zhihu.com'
+    newUserSet = set()
+    if 'users' in tables['name']:
+        oldUserlist = pd.read_sql("select web_name from users", sqlite_db_connect)
+        oldUserSet = set(oldUserlist['web_name'])
+    else:
+        oldUserSet = set()
 
-followings_df = pd.DataFrame()
-user_df = pd.DataFrame()
-answers_df = pd.DataFrame()
-# root_url = 'https://www.zhihu.com/people/meretsger'
-# root_user = {'tag': 'people', 'webname': 'meretsger'}
-root_user = "/people/meretsger"
-zhihu_url = 'https://www.zhihu.com'
-newUserSet = set()
-oldUserSet = set()
+    newUserSet.add(root_user)
 
-newUserSet.add(root_user)
+    craw_count = 0
 
+    while len(newUserSet) > 0:
+        print("Crawing No.{} user...".format(craw_count))
 
-craw_count = 0
+        current_user = newUserSet.pop()
+        # current_url = urlparse.urljoin(zhihu_url, "/".join((current_user, 'following')))
+        # answers_url = urlparse.urljoin(zhihu_url, "/".join((current_user, 'answers')))
 
-while len(newUserSet) > 0:
-    print(craw_count)
-
-    current_user = newUserSet.pop()
-    # current_url = urlparse.urljoin(zhihu_url, "/".join((current_user, 'following')))
-    # answers_url = urlparse.urljoin(zhihu_url, "/".join((current_user, 'answers')))
-
-    oldUserSet.add(current_user)
-    # current_user_name = re.split('/', re.sub('https://www.zhihu.com/', '', user))[1]
-    try:
-        followings_data, answers_data, user_profile = CrawUsers(current_user)
-        followings_data['id'] = craw_count
-        # print(current_user_name)
-        # print(result_data1)
-        for following_user in followings_data['following_user']:
-            if following_user not in oldUserSet:
-                newUserSet.add(following_user)
-        print("""Crawing {}'s data ... ... """.format(current_user))
+        oldUserSet.add(current_user)
         print("""His/her webname is {}""".format(current_user))
-        print(followings_data.shape)
-        followings_df = followings_df.append(followings_data, ignore_index=True)
-        user_profile['id'] = craw_count
-        user_df = user_df.append(user_profile, ignore_index=True)
-        answers_data['id'] = craw_count
-        answers_df = answers_df.append(answers_data)
+        # current_user_name = re.split('/', re.sub('https://www.zhihu.com/', '', user))[1]
+        try:
+            followings_data, answers_data, user_profile = craw_users(current_user)
+            followings_data['id'] = craw_count
+            # print(current_user_name)
+            # print(result_data1)
+            for following_user in followings_data['following_user']:
+                if following_user not in oldUserSet:
+                    newUserSet.add(following_user)
 
-    except Exception as e:
-        print(e)
-        print("""User {} craw failed""".format(current_user))
+            print("followings data shape", followings_data.shape, sep=':')
+            # followings_df = followings_df.append(followings_data, ignore_index=True)
+            user_profile['id'] = craw_count
+            # user_df = user_df.append(user_profile, ignore_index=True)
+            answers_data['id'] = craw_count
+            # answers_df = answers_df.append(answers_data)
+            print("answers data shape", answers_data.shape, sep=':')
+            followings_data.to_sql('following', if_exists='append')
+            user_profile.to_sql("users", if_exists='append')
+            answers_data.to_sql('answers', if_exists='append')
 
-    craw_count += 1
-    if craw_count == 10:
-        break
+        except Exception as e:
+            print(e)
+            print("""User {} craw failed""".format(current_user))
 
-    # if current_user_name == 'rou-wang-wan':
-    #     break
+        craw_count += 1
+        if craw_count == 10:
+            break
+
+        # if current_user_name == 'rou-wang-wan':
+        #     break
+
+    driver.close()
+    sqlite_db.close()
 
 
-driver.close()
-
-
-
+if __name__ == 'main':
+    main()
