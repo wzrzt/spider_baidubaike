@@ -139,6 +139,8 @@ def craw_user_info(user, driver):
                                          '所在行业': 'industry',
                                          '职业经历': 'work_experience',
                                          '教育经历': 'education'}, inplace=True)
+        else:
+            user_profile = pd.DataFrame()
 
         user_headline1 = answers_source_soup.find('span', class_="RichText ProfileHeader-headline")
         if user_headline1:
@@ -345,4 +347,4 @@ def main(max_craw):
 
 
 if __name__ == '__main__':
-    main(max_craw=10)
+    main(max_craw=1000)
