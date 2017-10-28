@@ -195,9 +195,11 @@ def craw_following(user, driver):
     else:
         following_page_count = math.ceil(following_count / 20)
         followings = source_soup.find_all('h2', class_='ContentItem-title')
+        print(len(followings))
         retry_times = 0
         if following_page_count > 2:
             for i in range(2, int(following_page_count) + 1):
+                print(i)
                 user_following_url = '?'.join((following_url, 'page={}'.format(i)))
                 driver.get(user_following_url)
                 time.sleep(0.5)
@@ -205,10 +207,11 @@ def craw_following(user, driver):
                 url_source = driver.page_source
                 source_soup = BeautifulSoup(url_source, 'html.parser')
                 following_more = source_soup.find_all('h2', class_='ContentItem-title')
-
+                print(len(following_more))
                 while (i < following_page_count and len(following_more) < 20) or \
                         (i == following_page_count and len(following_more) < following_count -
                             (following_page_count - 1) * 20):
+                    print("retry")
                     retry_times += 1
                     time.sleep(0.5 * retry_times)
                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -216,11 +219,16 @@ def craw_following(user, driver):
                     source_soup = BeautifulSoup(url_source, 'html.parser')
                     following_more = source_soup.find_all('h2', class_='ContentItem-title')
 
+                print(len(following_more))
                 followings.extend(following_more)
                 retry_times = 0
 
+        following_count = 0
+
         followings_data = pd.DataFrame()
         for following in followings:
+            following_count += 1
+            print(following_count)
             following_user = following.find('a', attrs={'data-za-detail-view-element_name': 'User'})['href']
             following_data = {}
 
@@ -231,7 +239,6 @@ def craw_following(user, driver):
             else:
                 following_data['Certification_tag'] = None
                 followings_data = followings_data.append(pd.DataFrame(following_data, index=[0]))
-
         followings_data['current_user'] = user
 
         return followings_data
@@ -293,7 +300,9 @@ def craw_user_info(user, driver):
         else:
             user_profile[keyname] = keyvalue.get_text()
 
-    user_profile = pd.DataFrame(user_profile, index=[0])
+    # user_profile = pd.DataFrame(user_profile, index=[0])
+    user_profile = pd.DataFrame([user_profile],
+        columns=['个人简介', '居住地', '所在行业', '职业经历', '教育经历'])
     user_profile.rename(columns={'个人简介': 'self_introduce',
                                  '居住地': 'living_area',
                                  '所在行业': 'industry',
@@ -439,34 +448,36 @@ def main(max_craw):
             user_profile = craw_user_info(current_user, driver=driver)
             user_profile['id'] = craw_count
             user_profile.to_sql("users", con=sqlite_db_connect, if_exists='append', index=False)
+
+            try:
+                followings_data = craw_following(current_user, driver=driver)
+                # print(current_user_name)
+                # print(result_data1)
+                for following_user in followings_data['following_user']:
+                    if following_user not in oldUserSet:
+                        newUserSet.add(following_user)
+
+                print("followings data shape", followings_data.shape, sep=':')
+                followings_data.to_sql("followings", con=sqlite_db_connect, if_exists='append', index=False)
+
+            except Exception as following_e:
+                print(following_e)
+                print("""following of {} craw failed or he/she has no following""".format(current_user))
+
+            try:
+                answers_data = craw_answers(current_user, driver=driver)
+                print("answers data shape", answers_data.shape, sep=':')
+                answers_data.to_sql('answers', sqlite_db_connect, if_exists='append', index=False)
+
+            except Exception as answer_e:
+                print(answer_e)
+                print("""following of {} craw failed or he/she has no answer""".format(current_user))
+
         except Exception as user_info_e:
             print(user_info_e)
             print("""User information of {} craw failed""".format(current_user))
             sqlite_db.execute("insert into users('id', 'web_name') values({}, '{}')".format(craw_count, current_user))
 
-        try:
-            followings_data = craw_following(current_user, driver=driver)
-            # print(current_user_name)
-            # print(result_data1)
-            for following_user in followings_data['following_user']:
-                if following_user not in oldUserSet:
-                    newUserSet.add(following_user)
-
-            print("followings data shape", followings_data.shape, sep=':')
-            followings_data.to_sql("followings", con=sqlite_db_connect, if_exists='append', index=False)
-
-        except Exception as following_e:
-            print(following_e)
-            print("""following of {} craw failed or he/she has no following""".format(current_user))
-
-        try:
-            answers_data = craw_answers(current_user, driver=driver)
-            print("answers data shape", answers_data.shape, sep=':')
-            answers_data.to_sql('answers', sqlite_db_connect, if_exists='append', index=False)
-
-        except Exception as answer_e:
-            print(answer_e)
-            print("""following of {} craw failed or he/she has no answer""".format(current_user))
 
         craw_count += 1
         if craw_count == max_craw:
@@ -480,4 +491,4 @@ def main(max_craw):
 
 
 if __name__ == '__main__':
-    main(max_craw=1000)
+    main(max_craw=4)
